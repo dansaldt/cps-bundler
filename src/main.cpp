@@ -60,7 +60,7 @@ typedef struct wydecontext {
     fs::path path_wyderoot;
     fs::path path_god;
     fs::path path_bundle_index;
-    std::map<std::string, fs::path> bundles;
+    std::map<std::string, fs::path> bundles_path;
 } wydecontext;
 
 // trim from start (in place)
@@ -140,7 +140,7 @@ int main ()
 	for (auto &bundle_path: fs::recursive_directory_iterator{wydectx.path_god}) {
 		if (bundle_path.is_directory()) {
 			auto bundle = fs::relative(bundle_path, wydectx.path_god);
-			wydectx.bundles[bundle.generic_string()] = std::move(bundle_path);
+			wydectx.bundles_path[bundle.generic_string()] = std::move(bundle_path);
 		}
 	}
 
@@ -157,13 +157,26 @@ int main ()
 	std::regex class_or_modules("^\t\t\t[^\t]+");
 	// loop each line in the file, only those line that match the regex are treated
 	char buf[256];
+	std::string cur_bundle1;
+	std::string cur_bundle2;
+	std::string cur_class_module;
 	while (ifs_bundle_idx.getline(buf, sizeof(buf))) {
 		if (std::regex_match(buf, class_or_modules)) {
-//			std::cout << buf << '\n';
+			cur_class_module = buf;
+			trim(cur_class_module);
+			if (cur_bundle1.empty() || cur_bundle2.empty()) {
+				std::cout << "ERROR: cannot put class/module \"" << cur_class_module << " to any bundle: "
+					  << "cur_bundle1=\"" << cur_bundle1 << "\", "
+					  << "cur_bundle2=\"" << cur_bundle2 << "\".\n";
+			} else {
+				std::cout << cur_bundle1 << "/" << cur_bundle2 << "\t" << cur_class_module << "\n";
+			}
 		} else if (std::regex_match(buf, bundle2)) {
-			std::cout << buf << '\n';
+			cur_bundle2 = buf;
+			trim(cur_bundle2);
 		} else if (std::regex_match(buf, bundle1)) {
-			std::cout << buf << '\n';
+			cur_bundle1 = buf;
+			trim(cur_bundle1);
 		}
 	}
 	// done, close bundle index file

@@ -93,7 +93,7 @@ int main ()
 {
 	wydecontext wydectx;
 
-	if (auto ret = init(wydectx) > 0) {
+	if (auto ret = init(wydectx) != 0) {
 		return ret;
 	}
 

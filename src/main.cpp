@@ -52,7 +52,7 @@ void test_filepath ()
 }
 
 const auto env_var_wyde_root = "WYDE-ROOT";
-const auto bundle_index_filename = "bundle-index.json";
+const auto bundle_index_filename = "bundle-index.txt";
 
 typedef struct wydecontext {
     fs::path path_wyderoot;

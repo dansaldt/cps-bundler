@@ -3,6 +3,8 @@
 #include <filesystem>
 #include <string>
 #include <map>
+#include <fstream>
+#include <regex>
 
 namespace fs = std::filesystem;
 
@@ -57,6 +59,7 @@ const auto bundle_index_filename = "bundle-index.txt";
 typedef struct wydecontext {
     fs::path path_wyderoot;
     fs::path path_god;
+    fs::path path_bundle_index;
     std::map<std::string, fs::path> bundles;
 } wydecontext;
 
@@ -77,14 +80,27 @@ int init ( wydecontext &wp )
 	}
 
 	// check if god path exists
-	fs::path god_path = wyderoot_path.append("god");
+	fs::path god_path(wyderoot_path);
+	god_path.append("god");
 	if (!fs::exists(god_path)) {
 		std::cout << "ERROR: path doesn't exists or invalid: " << god_path << '\n';
 		return -3;
 	}
 
+	// check for bundle index json file in `wydectx.path_god`
+	fs::path bundle_index_path(god_path);
+	bundle_index_path.append(bundle_index_filename);
+	if (!fs::exists(bundle_index_path)) {
+		std::cout << "ERROR: path doesn't exists or invalid: " << bundle_index_path << '\n';
+		return -4;
+	} else if (!fs::is_regular_file(bundle_index_path)) {
+		std::cout << "ERROR: is not valid file, expecting regurlar file: " << bundle_index_path << '\n';
+		return -5;
+	}
+
 	wp.path_wyderoot = std::move(wyderoot_path);
 	wp.path_god = std::move(god_path);
+	wp.path_bundle_index = std::move(bundle_index_path);
 
 	return 0;
 }
@@ -104,10 +120,30 @@ int main ()
 		}
 	}
 
-	for (auto &p: wydectx.bundles)
-		std::cout << p.first << ": path=" << p.second << '\n';
-
-
+	// opening the bundle index file
+	std::ifstream ifs_bundle_idx(wydectx.path_bundle_index);
+	if (!ifs_bundle_idx.is_open()) {
+		std::cout << "ERROR: failed to open file: " << wydectx.path_bundle_index << '\n';
+		return -6;
+	}
+	// regex to identify which is bundle1, bundle2, lass_or_module
+	// by identifying prefix tabs
+	std::regex bundle1("^\t[^\t]+");
+	std::regex bundle2("^\t\t[^\t]+");
+	std::regex class_or_modules("^\t\t\t[^\t]+");
+	// loop each line in the file, only those line that match the regex are treated
+	char buf[256];
+	while (ifs_bundle_idx.getline(buf, sizeof(buf))) {
+		if (std::regex_match(buf, class_or_modules)) {
+//			std::cout << buf << '\n';
+		} else if (std::regex_match(buf, bundle2)) {
+			std::cout << buf << '\n';
+		} else if (std::regex_match(buf, bundle1)) {
+			std::cout << buf << '\n';
+		}
+	}
+	// done, close bundle index file
+	ifs_bundle_idx.close();
 
 	return 0;
 }

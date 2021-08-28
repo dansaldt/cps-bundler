@@ -72,14 +72,14 @@ int init ( wydecontext &wp )
 	// check if wyde-root path exists
 	fs::path wyderoot_path = {env_wyde_root};
 	if (!fs::exists(wyderoot_path)) {
-		std::cout << "ERROR: path doesn't exists: " << wyderoot_path << '\n';
+		std::cout << "ERROR: path doesn't exists or invalid: " << wyderoot_path << '\n';
 		return -2;
 	}
 
 	// check if god path exists
 	fs::path god_path = wyderoot_path.append("god");
 	if (!fs::exists(god_path)) {
-		std::cout << "ERROR: path doesn't exists: " << god_path << '\n';
+		std::cout << "ERROR: path doesn't exists or invalid: " << god_path << '\n';
 		return -3;
 	}
 

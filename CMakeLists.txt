@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
-project(Bundler_exe)
+project(cps_bundler)
 
 set(CMAKE_CXX_STANDARD 20)
 
-add_executable(Bundler_exe src/main.cpp)
+add_executable(CpsBundler src/main.cpp)

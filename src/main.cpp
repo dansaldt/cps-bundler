@@ -126,7 +126,7 @@ int main ()
 		std::cout << "ERROR: failed to open file: " << wydectx.path_bundle_index << '\n';
 		return -6;
 	}
-	// regex to identify which is bundle1, bundle2, lass_or_module
+	// regex to identify which is bundle1, bundle2, class_or_module
 	// by identifying prefix tabs
 	std::regex bundle1("^\t[^\t]+");
 	std::regex bundle2("^\t\t[^\t]+");

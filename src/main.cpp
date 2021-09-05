@@ -38,13 +38,13 @@ static inline void trim(std::string &s) {
     rtrim(s);
 }
 
-static const char* OPT_CACHE = "--cache";
-static const char* OPT_CACHE_SHORT = "-c";
-static const char* OPT_CACHE_OFF = "off";
-static const char* CACHED_FILE_NAME = "CpsBundlerCache.txt";
+static const char *OPT_CACHE = "--cache";
+static const char *OPT_CACHE_SHORT = "-c";
+static const char *OPT_CACHE_OFF = "off";
+static const char *CACHED_FILE_NAME = "CpsBundlerCache.txt";
 
-static const char* OPT_FILES = "--files";
-static const char* OPT_FILES_SHORT = "-f";
+static const char *OPT_FILES = "--files";
+static const char *OPT_FILES_SHORT = "-f";
 
 static inline std::string_view get_opt_val(std::string_view s, std::string_view opt) {
     auto opt_len = strlen(opt.data());
@@ -190,11 +190,20 @@ int main(int argc, char *argv[]) {
     }
 
     // move cached files directly to target directory
-    for (auto[file, dest]: ctx.caches) {
-        auto src = ctx.files2move[file];
+    for (auto[file, src]: ctx.files2move) {
+
+        ctx.files_moved[file] = false;
+
         if (!fs::exists(src))
             continue;
 
+        auto dest = ctx.caches[file];
+
+        // if not cached string will be empty, skip
+        if (dest.string().empty())
+            continue;
+
+        // check dest directory, create if non-existing
         if (!fs::exists(dest) && !fs::create_directory(dest)) {
             std::cout << "ERROR> "
                       << file << " cached to dir " << dest
@@ -202,12 +211,15 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
+        // make destination name
         auto dest_file = fs::path(dest);
         dest_file.append(file);
 
+        // move
         std::error_code ec;
         fs::rename(src, dest_file, ec);
 
+        // if there's an error, print err
         if (ec.value() != 0) {
             std::cout << "ERROR> failed to move file "
                       << file << " to " << dest
@@ -215,15 +227,84 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
+        // success, marked as moved and print info
         ctx.files_moved[file] = true;
+        std::cout << "INFO> " << file << " => " << dest << '\n';
     }
+    std::cout << std::flush;
 
+    // get files still need to be moved because were not cached
+    std::vector<fs::path> non_cached_fnames2_move;
+    for (auto[file, moved]: ctx.files_moved) {
+        if (!moved) {
+            non_cached_fnames2_move.emplace_back(fs::path{file});
+        }
+    }
     // recursively search for files in the target path to move into
-    for (auto &p: fs::recursive_directory_iterator{ctx.path_target}) {
-        // TODO
+    if (!non_cached_fnames2_move.empty()) {
+        for (auto &it: fs::recursive_directory_iterator{ctx.path_target}) {
+            // directory or file with different extension not needed
+            if (!it.is_regular_file())
+                continue;
+            if (ctx.extension.compare(it.path().extension()) != 0)
+                continue;
+
+            // compare
+            const auto &p = it.path();
+            auto f = p.filename();
+            for (auto &fname: non_cached_fnames2_move) {
+                if (fname.compare(f) == 0) {
+                    auto name_str = fname.string();
+                    auto &src = ctx.files2move[name_str];
+                    std::error_code ec;
+
+                    // move
+                    fs::rename(src, p, ec);
+
+                    // if there's an error, print err
+                    if (ec.value() != 0) {
+                        std::cout << "ERROR> failed to move file "
+                                  << name_str << " to " << p
+                                  << ": " << ec.message() << "\n";
+                        continue;
+                    }
+
+                    // success, marked as moved and print info
+                    ctx.files_moved[name_str] = true;
+                    std::cout << "INFO> " << name_str << " => " << p << '\n';
+                }
+            }
+
+            if (non_cached_fnames2_move.empty())
+                break;
+        }
     }
 
     // TODO write to cache if necessary
+
+    // count files moved and failed
+    size_t count_moved = 0;
+    size_t count_move_failed = 0;
+    for (auto[file, moved]: ctx.files_moved) {
+        if (moved) {
+            ++count_moved;
+        } else {
+            ++count_move_failed;
+        }
+    }
+
+    // print summary
+    std::cout << "finished, ";
+    if (count_moved > 0) {
+        std::cout << "moved " << count_moved << " file(s)";
+    }
+    if (count_move_failed > 0) {
+        if (count_moved > 0) {
+            std::cout << ", ";
+        }
+        std::cout << "failed to move " << count_move_failed << " file(s)";
+    }
+    std::cout << "." << std::endl;
 
     return 0;
 }

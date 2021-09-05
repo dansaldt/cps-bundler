@@ -78,7 +78,20 @@ int init(wydecontext &wp) {
     return 0;
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+
+    if (argc < 2) {
+        std::cout << "Usage: " << argv[0] << " eWamSrcPath [options]\n";
+        std::cout << "eWamSrcPath: target directory where files are moved to.";
+        std::cout << "options: -e | --append-extension, default searching for .god files.\n";
+        std::cout << "         -E | --extension, override default and append additional extension.\n";
+        std::cout << "         -f | --files, move only selected files instead of all files in current directory,\n";
+        std::cout << "                       multiple files are comma separated.";
+        std::cout << "         -c | --cache, cache files which are moved to eWamSrcPath in ./OcsBundlerCache.txt,\n";
+        std::cout << "                       by default cache is on, to turn off set --cache=off";
+        std::cout << std::endl;
+    }
+
     wydecontext wydectx;
 
     if (auto ret = init(wydectx) != 0) {

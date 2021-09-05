@@ -1,21 +1,22 @@
-#include <cstdlib>
 #include <iostream>
 #include <filesystem>
 #include <map>
 #include <fstream>
 #include <regex>
+#include <string>
+#include <cctype>
 
 namespace fs = std::filesystem;
 
-const auto env_var_wyde_root = "WYDE-ROOT";
-const auto bundle_index_filename = "bundle-index.txt";
-
-typedef struct wydecontext {
-    fs::path path_wyderoot;
-    fs::path path_god;
-    fs::path path_bundle_index;
-    std::map<std::string, fs::path> bundles_path;
-} wydecontext;
+typedef struct context {
+    fs::path path_target;
+    fs::path path_cache;
+    fs::path extension;
+    std::map<std::string, fs::path> files2move;
+    std::map<std::string, bool> files_moved;
+    std::map<std::string, fs::path> caches;
+    bool cached = true;
+} context;
 
 // trim from start (in place)
 static inline void ltrim(std::string &s) {
@@ -37,112 +38,192 @@ static inline void trim(std::string &s) {
     rtrim(s);
 }
 
-int init(wydecontext &wp) {
-    // get wyde-root environment variable
-    const char *env_wyde_root = std::getenv(env_var_wyde_root);
-    if (!env_wyde_root) {
-        std::cout << "ERROR: environment variables \"" << env_var_wyde_root << "\" is not set\n";
-        return -1;
+static const char* OPT_CACHE = "--cache";
+static const char* OPT_CACHE_SHORT = "-c";
+static const char* OPT_CACHE_OFF = "off";
+static const char* CACHED_FILE_NAME = "CpsBundlerCache.txt";
+
+static const char* OPT_FILES = "--files";
+static const char* OPT_FILES_SHORT = "-f";
+
+static inline std::string_view get_opt_val(std::string_view s, std::string_view opt) {
+    auto opt_len = strlen(opt.data());
+    auto ret = s.substr(opt_len + 1, strlen(s.data()) - opt_len);
+    return ret;
+}
+
+static inline bool is_opt_set(std::string_view s, std::string_view opt, std::string_view opt_short) {
+
+    auto opt_cache = s.find(opt);
+    if (opt_cache != std::string::npos) {
+        auto val = get_opt_val(s, OPT_CACHE);
+        if (val.compare(OPT_CACHE_OFF) == 0) {
+            return true;
+        }
     }
 
-    // check if wyde-root path exists
-    fs::path wyderoot_path = {env_wyde_root};
-    if (!fs::exists(wyderoot_path)) {
-        std::cout << "ERROR: path doesn't exists or invalid: " << wyderoot_path << '\n';
-        return -2;
+    opt_cache = s.find(opt_short);
+    if (opt_cache != std::string::npos) {
+        auto val = get_opt_val(s, opt_short);
+        if (val.compare(OPT_CACHE_OFF) == 0) {
+            return true;
+        }
     }
 
-    // check if god path exists
-    fs::path god_path(wyderoot_path);
-    god_path.append("god");
-    if (!fs::exists(god_path)) {
-        std::cout << "ERROR: path doesn't exists or invalid: " << god_path << '\n';
-        return -3;
-    }
+    return false;
+}
 
-    // check for bundle index json file in `wydectx.path_god`
-    fs::path bundle_index_path(god_path);
-    bundle_index_path.append(bundle_index_filename);
-    if (!fs::exists(bundle_index_path)) {
-        std::cout << "ERROR: path doesn't exists or invalid: " << bundle_index_path << '\n';
-        return -4;
-    } else if (!fs::is_regular_file(bundle_index_path)) {
-        std::cout << "ERROR: is not valid file, expecting regurlar file: " << bundle_index_path << '\n';
-        return -5;
-    }
+int override_options(context &ctx, int argc, char **argv) {
 
-    wp.path_wyderoot = std::move(wyderoot_path);
-    wp.path_god = std::move(god_path);
-    wp.path_bundle_index = std::move(bundle_index_path);
+    for (int i = 2; i < argc; ++i) {
+        std::string_view optval = argv[i];
+
+        // option --cache | -c
+        if (is_opt_set(optval,
+                /*opt*/ OPT_CACHE,
+                /*opt_short*/ OPT_CACHE_SHORT)) {
+            ctx.cached = true;
+            continue;
+        }
+
+        // option --files | -f
+        if (is_opt_set(optval,
+                /*opt*/ OPT_FILES,
+                /*opt_short*/ OPT_FILES_SHORT)) {
+            // TODO
+        }
+    }
 
     return 0;
 }
 
-int main(int argc, char* argv[]) {
+int init(context &ctx, int argc, char **argv) {
 
-    if (argc < 2) {
-        std::cout << "Usage: " << argv[0] << " eWamSrcPath [options]\n";
-        std::cout << "eWamSrcPath: target directory where files are moved to.";
-        std::cout << "options: -e | --append-extension, default searching for .god files.\n";
-        std::cout << "         -E | --extension, override default and append additional extension.\n";
-        std::cout << "         -f | --files, move only selected files instead of all files in current directory,\n";
-        std::cout << "                       multiple files are comma separated.";
-        std::cout << "         -c | --cache, cache files which are moved to eWamSrcPath in ./OcsBundlerCache.txt,\n";
-        std::cout << "                       by default cache is on, to turn off set --cache=off";
-        std::cout << std::endl;
+    // check target dir if exists
+    fs::path target_path = {argv[1]};
+    if (!fs::exists(target_path)) {
+        std::cout << "ERROR> eWamSrcPath doesn't exists or invalid: " << argv[1] << '\n';
+        return -1;
     }
 
-    wydecontext wydectx;
+    // get cache file in current directory
+    fs::path cache_path = fs::current_path();
+    cache_path.append(CACHED_FILE_NAME);
 
-    if (auto ret = init(wydectx) != 0) {
+    // initialize context
+    ctx.path_target = std::move(target_path);
+    ctx.cached = true;
+    ctx.extension = fs::path{".god"};
+    if (fs::exists(cache_path)) {
+        ctx.path_cache = std::move(cache_path);
+    }
+
+    // check options and override if necessary
+    if (auto ret = override_options(ctx, argc, argv) != 0) {
         return ret;
     }
 
-    for (auto &bundle_path: fs::recursive_directory_iterator{wydectx.path_god}) {
-        if (bundle_path.is_directory()) {
-            auto bundle = fs::relative(bundle_path, wydectx.path_god);
-            wydectx.bundles_path[bundle.generic_string()] = std::move(bundle_path);
+    return 0;
+}
+
+
+int main(int argc, char *argv[]) {
+
+    if (argc < 2) {
+        std::cout << "Usage: " << argv[0] << " eWamSrcPath [options]\n";
+        std::cout << "eWamSrcPath: target directory where files are moved to.\n";
+        std::cout << "options: -e | --append-extension, default searching for .god files.\n";
+        std::cout << "         -E | --extension, override default and append additional extension.\n";
+        std::cout << "         -f | --files, move only selected files instead of all files in current directory,\n";
+        std::cout << "                       multiple files are comma separated.\n";
+        std::cout << "         -c | --cache, cache files which are moved to eWamSrcPath in ./OcsBundlerCache.txt,\n";
+        std::cout << "                       by default cache is on, to turn off set --cache=off\n";
+        std::cout << std::endl;
+
+        return -1;
+    }
+
+    context ctx;
+
+    if (auto ret = init(ctx, argc, argv) != 0) {
+        return ret;
+    }
+
+    // get files to move
+    for (auto &file: fs::directory_iterator{fs::current_path()}) {
+        if (file.is_regular_file() && ctx.extension.compare(file.path().extension()) == 0) {
+            auto path = file.path();
+            auto name = path.filename().string();
+            ctx.files2move[std::move(name)] = std::move(path);
+        }
+    }
+    if (ctx.files2move.empty()) {
+        // nothing to move
+        return 0;
+    }
+
+    // read cache if exists
+    if (ctx.cached
+        && fs::exists(ctx.path_cache)
+        && fs::file_size(ctx.path_cache) > 0) {
+
+        std::ifstream fcache(ctx.path_cache);
+        // if cache file cannot be open, skip it
+        if (fcache.is_open()) {
+            char buf[8192];
+            memset(buf, 0, sizeof(buf));
+            while (fcache.getline(buf, sizeof(buf))) {
+                std::string_view cacheline{buf};
+                auto sep_pos = cacheline.find('=');
+                if (sep_pos != std::string::npos) {
+                    auto file = cacheline.substr(0, sep_pos);
+                    auto cached_dest = cacheline.substr(sep_pos + 1);
+                    auto cached_dest_path = fs::path(cached_dest);
+                    if (fs::is_directory(cached_dest_path)) {
+                        ctx.caches[std::string{file}] = std::move(cached_dest_path);
+                    }
+                }
+                memset(buf, 0, sizeof(buf));
+            }
+            fcache.close();
         }
     }
 
-    // opening the bundle index file
-    std::ifstream ifs_bundle_idx(wydectx.path_bundle_index);
-    if (!ifs_bundle_idx.is_open()) {
-        std::cout << "ERROR: failed to open file: " << wydectx.path_bundle_index << '\n';
-        return -6;
-    }
-    // regex to identify which is bundle1, bundle2, class_or_module
-    // by identifying prefix tabs
-    std::regex bundle1("^\t[^\t]+");
-    std::regex bundle2("^\t\t[^\t]+");
-    std::regex class_or_modules("^\t\t\t[^\t]+");
-    // loop each line in the file, only those line that match the regex are treated
-    char buf[256];
-    std::string cur_bundle1;
-    std::string cur_bundle2;
-    std::string cur_class_module;
-    while (ifs_bundle_idx.getline(buf, sizeof(buf))) {
-        if (std::regex_match(buf, class_or_modules)) {
-            cur_class_module = buf;
-            trim(cur_class_module);
-            if (cur_bundle1.empty() || cur_bundle2.empty()) {
-                std::cout << "ERROR: cannot put class/module \"" << cur_class_module
-                          << " to any bundle: "
-                          << "cur_bundle1=\"" << cur_bundle1 << "\", "
-                          << "cur_bundle2=\"" << cur_bundle2 << "\".\n";
-            } else {
-                std::cout << cur_bundle1 << "/" << cur_bundle2 << "\t" << cur_class_module << "\n";
-            }
-        } else if (std::regex_match(buf, bundle2)) {
-            cur_bundle2 = buf;
-            trim(cur_bundle2);
-        } else if (std::regex_match(buf, bundle1)) {
-            cur_bundle1 = buf;
-            trim(cur_bundle1);
+    // move cached files directly to target directory
+    for (auto[file, dest]: ctx.caches) {
+        auto src = ctx.files2move[file];
+        if (!fs::exists(src))
+            continue;
+
+        if (!fs::exists(dest) && !fs::create_directory(dest)) {
+            std::cout << "ERROR> "
+                      << file << " cached to dir " << dest
+                      << ", but dir doesn't exists and cannot create one\n";
+            continue;
         }
+
+        auto dest_file = fs::path(dest);
+        dest_file.append(file);
+
+        std::error_code ec;
+        fs::rename(src, dest_file, ec);
+
+        if (ec.value() != 0) {
+            std::cout << "ERROR> failed to move file "
+                      << file << " to " << dest
+                      << ": " << ec.message() << "\n";
+            continue;
+        }
+
+        ctx.files_moved[file] = true;
     }
-    // done, close bundle index file
-    ifs_bundle_idx.close();
+
+    // recursively search for files in the target path to move into
+    for (auto &p: fs::recursive_directory_iterator{ctx.path_target}) {
+        // TODO
+    }
+
+    // TODO write to cache if necessary
 
     return 0;
 }

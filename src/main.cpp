@@ -19,33 +19,13 @@ typedef struct context {
     bool cached = true;
 } context;
 
-// trim from start (in place)
-static inline void ltrim(std::string &s) {
-    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) {
-        return !std::isspace(ch);
-    }));
-}
-
-// trim from end (in place)
-static inline void rtrim(std::string &s) {
-    s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) {
-        return !std::isspace(ch);
-    }).base(), s.end());
-}
-
-// trim from both ends (in place)
-static inline void trim(std::string &s) {
-    ltrim(s);
-    rtrim(s);
-}
-
 static const char *OPT_CACHE = "--cache";
 static const char *OPT_CACHE_SHORT = "-c";
 static const char *OPT_CACHE_OFF = "off";
 static const char *CACHED_FILE_NAME = "CpsBundlerCache.txt";
 
-static const char *OPT_FILES = "--files";
-static const char *OPT_FILES_SHORT = "-f";
+//static const char *OPT_FILES = "--files";
+//static const char *OPT_FILES_SHORT = "-f";
 
 static inline std::string_view get_opt_val(std::string_view s, std::string_view opt) {
     auto opt_len = strlen(opt.data());

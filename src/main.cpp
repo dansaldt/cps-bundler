@@ -1,4 +1,5 @@
 #include <iostream>
+#include <cstdio>
 #include <filesystem>
 #include <map>
 #include <fstream>
@@ -52,25 +53,24 @@ static inline std::string_view get_opt_val(std::string_view s, std::string_view 
     return ret;
 }
 
-static inline bool is_opt_set(std::string_view s, std::string_view opt, std::string_view opt_short) {
+static inline std::string_view opt_val_if_set(
+        std::string_view s,
+        bool *is_set,
+        std::string_view opt, std::string_view opt_short) {
 
     auto opt_cache = s.find(opt);
     if (opt_cache != std::string::npos) {
-        auto val = get_opt_val(s, OPT_CACHE);
-        if (val.compare(OPT_CACHE_OFF) == 0) {
-            return true;
-        }
+        *is_set = true;
+        return get_opt_val(s, opt);
     }
 
     opt_cache = s.find(opt_short);
     if (opt_cache != std::string::npos) {
-        auto val = get_opt_val(s, opt_short);
-        if (val.compare(OPT_CACHE_OFF) == 0) {
-            return true;
-        }
+        *is_set = true;
+        return get_opt_val(s, opt_short);
     }
 
-    return false;
+    return "";
 }
 
 int override_options(context &ctx, int argc, char **argv) {
@@ -79,18 +79,15 @@ int override_options(context &ctx, int argc, char **argv) {
         std::string_view optval = argv[i];
 
         // option --cache | -c
-        if (is_opt_set(optval,
+        bool opt_cache_set = false;
+        auto val = opt_val_if_set(optval, &opt_cache_set,
                 /*opt*/ OPT_CACHE,
-                /*opt_short*/ OPT_CACHE_SHORT)) {
-            ctx.cached = true;
+                /*opt_short*/ OPT_CACHE_SHORT);
+        if (opt_cache_set) {
+            if (val.compare(OPT_CACHE_OFF) == 0) {
+                ctx.cached = false;
+            }
             continue;
-        }
-
-        // option --files | -f
-        if (is_opt_set(optval,
-                /*opt*/ OPT_FILES,
-                /*opt_short*/ OPT_FILES_SHORT)) {
-            // TODO
         }
     }
 
@@ -114,9 +111,7 @@ int init(context &ctx, int argc, char **argv) {
     ctx.path_target = std::move(target_path);
     ctx.cached = true;
     ctx.extension = fs::path{".god"};
-    if (fs::exists(cache_path)) {
-        ctx.path_cache = std::move(cache_path);
-    }
+    ctx.path_cache = std::move(cache_path);
 
     // check options and override if necessary
     if (auto ret = override_options(ctx, argc, argv) != 0) {
@@ -236,6 +231,7 @@ int main(int argc, char *argv[]) {
 
     // get files still need to be moved because were not cached
     std::vector<fs::path> non_cached_fnames2_move;
+    std::map<std::string, fs::path> fnames2cache;
     for (auto[file, moved]: ctx.files_moved) {
         if (!moved) {
             non_cached_fnames2_move.emplace_back(fs::path{file});
@@ -273,6 +269,7 @@ int main(int argc, char *argv[]) {
                     // success, marked as moved and print info
                     ctx.files_moved[name_str] = true;
                     std::cout << "INFO> " << name_str << " => " << p << '\n';
+                    fnames2cache[name_str] = p;
                 }
             }
 
@@ -281,7 +278,25 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // TODO write to cache if necessary
+    // write to cache if necessary
+    if (ctx.cached && !non_cached_fnames2_move.empty()) {
+
+        std::ofstream fcache{ctx.path_cache,
+                             std::ios::out | std::ios::app};
+
+        if (!fcache.is_open()) {
+            std::cout << "ERROR> failed to write to cache: failed to open file: " << ctx.path_cache;
+        } else {
+            for (auto &fname: non_cached_fnames2_move) {
+                auto name_str = fname.string();
+                auto p = fnames2cache[name_str];
+                p = p.remove_filename();
+                fcache << name_str << "=" << p.string() << '\n';
+            }
+            fcache.close();
+        }
+
+    }
 
     // count files moved and failed
     size_t count_moved = 0;
@@ -306,6 +321,10 @@ int main(int argc, char *argv[]) {
         std::cout << "failed to move " << count_move_failed << " file(s)";
     }
     std::cout << "." << std::endl;
+
+    // pause console
+    std::cout << "Press <ENTER> to continue . . .\n" << std::flush;
+    std::getchar();
 
     return 0;
 }

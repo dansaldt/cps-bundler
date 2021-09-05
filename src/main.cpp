@@ -108,10 +108,10 @@ int main(int argc, char *argv[]) {
         std::cout << "Usage: " << argv[0] << " eWamSrcPath [options]\n";
         std::cout << "eWamSrcPath: target directory where files are moved to.\n";
         std::cout << "options:\n";
-        std::cout << "    -e | --append-extension, default searching for .god files.\n";
-        std::cout << "    -E | --extension, override default and append additional extension.\n";
-        std::cout << "    -f | --files, move only selected files instead of all files in current directory,\n";
-        std::cout << "                  multiple files are comma separated.\n";
+//        std::cout << "    -e | --append-extension, default searching for .god files.\n";
+//        std::cout << "    -E | --extension, override default and append additional extension.\n";
+//        std::cout << "    -f | --files, move only selected files instead of all files in current directory,\n";
+//        std::cout << "                  multiple files are comma separated.\n";
         std::cout << "    -c | --cache, cache files which are moved to eWamSrcPath in ./OcsBundlerCache.txt,\n";
         std::cout << "                  by default cache is on, to turn off set --cache=off\n";
         std::cout << std::endl;

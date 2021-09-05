@@ -269,9 +269,11 @@ int main(int argc, char *argv[]) {
         } else {
             for (auto &fname: non_cached_fnames2_move) {
                 auto name_str = fname.string();
-                auto p = fnames2cache[name_str];
-                p = p.remove_filename();
-                fcache << name_str << "=" << p.string() << '\n';
+                if (ctx.files_moved[name_str]) {
+                    auto p = fnames2cache[name_str];
+                    p = p.remove_filename();
+                    fcache << name_str << "=" << p.string() << '\n';
+                }
             }
             fcache.close();
         }
